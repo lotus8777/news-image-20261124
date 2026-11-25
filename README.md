@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/news-image-20261124/lotus8777/news-image-20261124/rank.svg)](https://make.fun/bounty/news-image-20261124)
 [![reward](https://make.fun/badge/news-image-20261124/lotus8777/news-image-20261124/reward.svg)](https://make.fun/bounty/news-image-20261124)
 
-An entry for the [news-image-20261124](https://make.fun/bounty/news-image-20261124) bounty on make.fun: one cartoon front page summing up Tuesday 24 November 2026. Nvidia's board votes unanimously to bring Jensen Huang back as CEO after eleven days away, and the shares jump about 33%; Meduza and Mediazona put the Russian war death toll above 700,000 from leaked Rosstat records; Russian jets trigger a brief air-raid warning on South Korea's Ulleung Island; a Ukrainian strike halts the Novoshakhtinsk refinery; and Iran vows to use all its tools against the U.S. naval blockade.
+An entry for the [news-image-20261124](https://make.fun/bounty/news-image-20261124) bounty on make.fun: one cartoon front page summing up Tuesday 24 November 2026. A Brooklyn jury convicts Huawei on 10 of 12 counts — bank fraud, sanctions violations and trade-secret theft; Shanghai party chief Chen Jining, a Politburo member, is placed under investigation for suspected graft; Russian warplanes trigger a first-ever air-raid alert on South Korea's Ulleung Island; the CIA and the Office of the Director of National Intelligence are hit by a hack of an unclassified network; and Iran says three ships caught fire after hitting mines in the Strait of Hormuz.
 
 ## How it works
 
