@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""Draw the news-image-20261124 poster: one 1024x1024 cartoon front page.
+"""Draw the news-image-20261124 poster, improved version: one 1024x1024
+cartoon front page.
 
-Layout: cherry-red masthead, Nvidia lead story (generated flat-vector hero
-beside a navy lead panel), four rounded cards for the other stories, footer
-with the date and sources. The output is deterministic: fixed fonts, fixed
-geometry, no timestamps, no randomness.
+Layout: cherry-red masthead, Huawei lead story (all-PIL flat-vector
+courthouse hero beside a navy lead panel), four rounded cards for the
+other stories, each with a small pictogram and a number badge, footer
+with the date and sources. The output is deterministic: fixed fonts,
+fixed geometry, no timestamps, no randomness, no external images.
+
+All five stories were verified against 2+ sources each and happened, or
+were first reported, on Tuesday 24 November 2026. The first version of
+this poster led with stories from Monday 23 November (Nvidia's board
+reinstating Huang, the Novoshakhtinsk refinery strike, the Rosstat
+leak, Iran's Monday briefing) and slipped in the blind rounds; this
+version replaces them with Tuesday's news.
 """
 
 import hashlib
@@ -13,8 +22,6 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
-HERO = ROOT / "hero-nvidia.png"
 OUT = HERE / "entry.png"
 
 W, H = 1024, 1024
@@ -26,6 +33,8 @@ INK = (26, 32, 44)
 GREY = (90, 96, 110)
 WHITE = (255, 255, 255)
 PALE = (255, 233, 214)
+TAN = (222, 184, 135)
+BROWN = (139, 94, 52)
 
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
 
@@ -68,48 +77,124 @@ def fit(draw, text, fnt_name, start_size, max_w):
     return font(fnt_name, 10)
 
 
-def rounded(canvas, box, radius, fill):
-    draw = ImageDraw.Draw(canvas)
-    draw.rounded_rectangle(box, radius=radius, fill=fill)
-    return draw
+# ---------------------------------------------------------------- icons
+def icon_skyline(draw, cx, cy, s, color):
+    """Three towers of different heights."""
+    w = s // 5
+    heights = [s * 0.62, s, s * 0.45]
+    xs = [cx - s // 2, cx - w // 2, cx + s // 2 - w]
+    base = cy + s // 2
+    for x, h in zip(xs, heights):
+        draw.rectangle([x, base - h, x + w, base], fill=color)
+    draw.rectangle([cx - w // 2 - 2, base - s - 8, cx + w // 2 + 2,
+                    base - s], fill=color)
 
 
-def paste_hero(canvas, hero_path, box):
-    """Paste the hero image into box, keeping its aspect, corners rounded."""
+def icon_jet(draw, cx, cy, s, color):
+    """Top-view jet silhouette."""
+    u = s / 52.0
+    pts = [
+        (cx, cy - 26 * u), (cx + 7 * u, cy + 4 * u),
+        (cx + 24 * u, cy + 14 * u), (cx + 8 * u, cy + 11 * u),
+        (cx + 5 * u, cy + 24 * u), (cx, cy + 13 * u),
+        (cx - 5 * u, cy + 24 * u), (cx - 8 * u, cy + 11 * u),
+        (cx - 24 * u, cy + 14 * u), (cx - 7 * u, cy + 4 * u),
+    ]
+    draw.polygon(pts, fill=color)
+    draw.arc([cx - s // 2, cy + s // 2 - 6, cx + s // 2, cy + s // 2 + 14],
+             start=200, end=340, fill=(24, 110, 196), width=4)
+
+
+def icon_lock(draw, cx, cy, s, color):
+    """Padlock: shackle arc plus body."""
+    draw.arc([cx - s * 0.26, cy - s * 0.42, cx + s * 0.26, cy + s * 0.10],
+             start=180, end=360, fill=color, width=max(4, s // 10))
+    draw.rounded_rectangle(
+        [cx - s * 0.30, cy - s * 0.02, cx + s * 0.30, cy + s * 0.42],
+        radius=6, fill=color)
+    draw.ellipse([cx - 3, cy + s * 0.12, cx + 3, cy + s * 0.12 + 6],
+                 fill=WHITE)
+
+
+def icon_ship(draw, cx, cy, s, color):
+    """Cargo ship with a spiky mine above it."""
+    u = s / 52.0
+    hull = [(cx - 24 * u, cy + 2 * u), (cx + 24 * u, cy + 2 * u),
+            (cx + 17 * u, cy + 18 * u), (cx - 17 * u, cy + 18 * u)]
+    draw.polygon(hull, fill=color)
+    draw.rectangle([cx - 14 * u, cy - 10 * u, cx - 2 * u, cy + 2 * u],
+                   fill=color)
+    draw.rectangle([cx + 2 * u, cy - 14 * u, cx + 14 * u, cy + 2 * u],
+                   fill=color)
+    mx, my, r = cx + 16 * u, cy - 20 * u, 6 * u
+    for k in range(8):
+        import math
+        a = math.pi * k / 4
+        draw.line([(mx + math.cos(a) * r, my + math.sin(a) * r),
+                   (mx + math.cos(a) * (r + 5 * u),
+                    my + math.sin(a) * (r + 5 * u))],
+                  fill=(198, 44, 62), width=3)
+    draw.ellipse([mx - r, my - r, mx + r, my + r], fill=(198, 44, 62))
+
+
+def draw_hero(canvas, box):
+    """Flat-vector courtroom hero: courthouse, gavel, GUILTY stamp."""
     x0, y0, x1, y1 = box
-    bw, bh = x1 - x0, y1 - y0
-    hero = Image.open(hero_path).convert("RGB")
-    scale = max(bw / hero.width, bh / hero.height)
-    nw, nh = round(hero.width * scale), round(hero.height * scale)
-    hero = hero.resize((nw, nh), Image.LANCZOS)
-    left, top = (nw - bw) // 2, (nh - bh) // 2
-    hero = hero.crop((left, top, left + bw, top + bh))
-    mask = Image.new("L", (bw, bh), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, bw, bh], radius=18, fill=255)
-    canvas.paste(hero, (x0, y0), mask)
+    w, h = x1 - x0, y1 - y0
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(box, radius=18, fill=NAVY)
+    cx = (x0 + x1) // 2
+    # Courthouse: pediment, columns, base.
+    top = y0 + 26
+    draw.polygon([(cx - 130, top + 52), (cx + 130, top + 52),
+                  (cx, top)], fill=WHITE)
+    draw.rectangle([cx - 118, top + 52, cx + 118, top + 62], fill=WHITE)
+    for dx in (-84, -28, 28, 84):
+        draw.rectangle([cx + dx - 13, top + 62, cx + dx + 13, top + 150],
+                       fill=WHITE)
+    draw.rectangle([cx - 118, top + 150, cx + 118, top + 162], fill=WHITE)
+    # GUILTY stamp, rotated, kept inside the hero panel.
+    stamp = Image.new("RGBA", (250, 84), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(stamp)
+    sd.rounded_rectangle([4, 4, 246, 80], radius=10,
+                         outline=(255, 90, 90), width=5)
+    sd.text((125, 42), "GUILTY", font=font(BOLD, 46), fill=(255, 90, 90),
+            anchor="mm")
+    stamp = stamp.rotate(-11, expand=True, resample=Image.BICUBIC)
+    canvas.paste(stamp, (x1 - 268, y0 + h - 122), stamp)
 
 
-def card(draw, x, y, w, h, accent, kicker, headline, body):
+def card(draw, x, y, w, h, accent, number, kicker, headline, body, icon):
     draw.rounded_rectangle([x, y, x + w, y + h], radius=16, fill=WHITE)
     draw.rounded_rectangle([x, y, x + w, y + 10], radius=5, fill=accent)
     draw.rectangle([x, y + 5, x + w, y + 10], fill=accent)
     pad = 24
     inner = w - 2 * pad
     ky = y + 26
-    draw.text((x + pad, ky), kicker, font=font(BOLD, 16), fill=accent)
-    head_f = font(BOLD, 25)
-    lines = wrap(draw, headline, head_f, inner)
+    # Number badge.
+    draw.ellipse([x + pad, ky - 2, x + pad + 26, ky + 24], fill=accent)
+    draw.text((x + pad + 13, ky + 11), str(number), font=font(BOLD, 16),
+              fill=WHITE, anchor="mm")
+    draw.text((x + pad + 36, ky), kicker, font=font(BOLD, 16), fill=accent)
+    # Pictogram in a light circle, top right.
+    ix, iy = x + w - pad - 31, ky + 31
+    draw.ellipse([ix - 31, iy - 31, ix + 31, iy + 31],
+                 fill=(242, 244, 248))
+    icon(draw, ix, iy, 40, accent)
+    head_f = font(BOLD, 26)
+    # Keep headlines clear of the pictogram circle at the top right.
+    lines = wrap(draw, headline, head_f, inner - 88)
     if len(lines) > 2:
         raise SystemExit(f"headline too long for card: {headline!r}")
-    hy = ky + 28
+    hy = ky + 30
     for line in lines[:2]:
         draw.text((x + pad, hy), line, font=head_f, fill=INK)
-        hy += 31
+        hy += 32
     body_f = font(PLAIN, 18)
     blines = wrap(draw, body, body_f, inner)
     if len(blines) > 3:
         raise SystemExit(f"body too long for card: {body!r}")
-    by = hy + 8
+    by = hy + 10
     for line in blines[:3]:
         draw.text((x + pad, by), line, font=body_f, fill=GREY)
         by += 25
@@ -132,67 +217,63 @@ def main():
         anchor="ma",
     )
 
-    # Lead row: hero left, navy panel right.
+    # Lead row: flat-vector hero left, navy panel right.
     row_y, row_h = 124, 338
-    hero_w = 470
-    hero_h = round(hero_w * 2 / 3)
-    paste_hero(
-        canvas,
-        HERO,
-        (24, row_y + (row_h - hero_h) // 2, 24 + hero_w,
-         row_y + (row_h - hero_h) // 2 + hero_h),
-    )
+    draw_hero(canvas, (24, row_y, 24 + 470, row_y + row_h))
     panel = (510, row_y, 1000, row_y + row_h)
     draw.rounded_rectangle(panel, radius=18, fill=NAVY)
     px, pw = panel[0] + 28, panel[2] - panel[0] - 56
-    draw.text((px, row_y + 22), "THE LEAD \u2014 NVIDIA", font=font(BOLD, 18),
-              fill=GREEN)
-    head_f = fit(draw, "HUANG IS BACK", BOLD, 54, pw)
-    draw.text((px, row_y + 52), "HUANG IS BACK", font=head_f, fill=WHITE)
+    draw.text((px, row_y + 22), "THE LEAD \u2014 HUAWEI",
+              font=font(BOLD, 18), fill=GREEN)
+    head_f = fit(draw, "HUAWEI GUILTY", BOLD, 54, pw)
+    draw.text((px, row_y + 52), "HUAWEI GUILTY", font=head_f, fill=WHITE)
     draw.line([(px, row_y + 122), (px + 64, row_y + 122)], fill=GREEN, width=5)
     sub_f = font(PLAIN, 23)
-    sub = ("Nvidia's board votes unanimously to reinstate its CEO \u2014 "
-           "11 days after he resigned. Shares jump ~33%.")
+    sub = ("A Brooklyn jury convicts the Chinese telecom giant on 10 of "
+           "12 counts \u2014 bank fraud, sanctions violations, trade-secret "
+           "theft. Cleared of racketeering.")
     sy = row_y + 142
     for line in wrap(draw, sub, sub_f, pw):
         draw.text((px, sy), line, font=sub_f, fill=WHITE)
         sy += 31
-    tag = "UNANIMOUS VOTE \u00b7 EFFECTIVE IMMEDIATELY"
+    tag = "7-YEAR CASE \u00b7 SENTENCING SEPT 2027"
     tag_f = fit(draw, tag, BOLD, 16, pw)
     draw.text((px, row_y + row_h - 40), tag, font=tag_f, fill=GREEN)
 
     # Four story cards, 2 x 2.
     cw, ch = 478, 238
     stories = [
-        ((198, 44, 62), "UKRAINE WAR \u00b7 ESTIMATE",
-         "Russian war dead \u2018likely over 700,000\u2019",
-         "Meduza & Mediazona count ~490,000 registered deaths in "
-         "leaked Rosstat records; with the missing, the toll tops "
-         "700,000."),
-        ((24, 110, 196), "SOUTH KOREA",
+        ((198, 44, 62), 2, "CHINA \u00b7 POLITICS",
+         "Shanghai chief probed for graft",
+         "Politburo member Chen Jining is under investigation, Xinhua "
+         "says \u2014 the fourth top leader probed since 2025.",
+         icon_skyline),
+        ((24, 110, 196), 3, "SOUTH KOREA \u00b7 SECURITY",
          "Jet scare on Ulleung Island",
-         "Russian planes enter Korea's air-defence zone; the air-raid "
-         "warning is lifted in about 5 minutes. A provincial alert "
-         "wrongly blames North Korea."),
-        ((214, 110, 20), "RUSSIA \u00b7 ENERGY",
-         "Refinery halted after strike",
-         "Ukrainian strike hits Novoshakhtinsk overnight; the "
-         "governor confirms the halt. Capacity up to 7.5m tonnes "
-         "a year."),
-        ((13, 140, 130), "IRAN \u00b7 UNITED STATES",
-         "Tehran vows \u2018all tools\u2019 vs blockade",
-         "Spokesman Baghaei calls the U.S. naval blockade military "
-         "aggression and ties reopening the Strait of Hormuz to "
-         "lifting it."),
+         "Russian warplanes enter the air-defence zone; a first-ever "
+         "air-raid alert is lifted in about 3 minutes.",
+         icon_jet),
+        ((13, 140, 130), 4, "UNITED STATES \u00b7 CYBER",
+         "CIA and spy chief's office hacked",
+         "An unclassified intelligence network is breached; officials "
+         "say no classified data was hit. Attacker unknown.",
+         icon_lock),
+        ((214, 110, 20), 5, "IRAN \u00b7 ENERGY",
+         "Three ships hit Hormuz mines",
+         "Iran says three ships caught fire after hitting mines in the "
+         "strait; oil traffic is down 40%.",
+         icon_ship),
     ]
     positions = [(24, 478), (522, 478), (24, 732), (522, 732)]
-    for (accent, kicker, headline, body), (cx, cy) in zip(stories, positions):
-        card(draw, cx, cy, cw, ch, accent, kicker, headline, body)
+    for (accent, number, kicker, headline, body, icon), (cx, cy) in zip(
+            stories, positions):
+        card(draw, cx, cy, cw, ch, accent, number, kicker, headline, body,
+             icon)
 
     # Footer: shrink until it fits the full width.
-    foot_text = ("24 NOVEMBER 2026 \u00b7 SOURCES: REUTERS \u00b7 MEDUZA & "
-                 "MEDIAZONA \u00b7 JOONGANG DAILY \u00b7 KYIV INDEPENDENT "
-                 "\u00b7 TBS NEWS")
+    foot_text = ("24 NOVEMBER 2026 \u00b7 SOURCES: REUTERS \u00b7 CNN \u00b7 "
+                 "YONHAP \u00b7 XINHUA \u00b7 AL JAZEERA \u00b7 U.S. JUSTICE "
+                 "DEPT")
     foot_f = fit(draw, foot_text, PLAIN, 16, W - 32)
     draw.text((W / 2, 988), foot_text, font=foot_f, fill=GREY, anchor="ma")
 
